@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
     tags:
       - 'v*'
   workflow_dispatch:
@@ -25,25 +26,30 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Restaurar Keystore Debug
+        run: |
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+          fi
+
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      - name: Compilar APK (Debug / Release)
+      - name: Compilar APK
         run: |
-          chmod +x ./gradlew || true
+          chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Renomear APK gerado
+      - name: Preparar APK para Download
         run: |
           mkdir -p output_apk
           cp app/build/outputs/apk/debug/app-debug.apk output_apk/escala_medina.apk
 
       - name: Publicar Release no GitHub
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         with:
           tag_name: latest
-          name: "Escala Medina - Versão Mais Recente"
+          name: "Escala Medina - Versão Mais Recente (APK)"
           draft: false
           prerelease: false
           files: |
