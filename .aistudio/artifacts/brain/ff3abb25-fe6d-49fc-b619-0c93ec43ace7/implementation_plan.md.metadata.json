@@ -1,0 +1,6 @@
+{
+  "summary": "Plano de implementação revisado com: (1) Construtor visual interativo de ciclo para escalas customizadas (ex: 3x2 com marcação de dias no calendário/sequência); (2) Registro e relatório mensal de Folga Trabalhada (FT) e Trocas de Plantão; (3) Assistente rápido de consulta por texto/voz ('Dia tal estou de folga?'); (4) Calendário inteligente com cálculo automático e feriados nacionais/estaduais.",
+  "updatedAt": "2026-10-14T02:54:28.686443722Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

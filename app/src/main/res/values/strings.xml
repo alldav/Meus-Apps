@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Escala Medina</string>
+    <string name="title_dashboard">Início</string>
+    <string name="title_calendar">Calendário</string>
+    <string name="title_quick_check">Simulador</string>
+    <string name="title_reports">Relatório FT</string>
+    <string name="title_settings">Escalas &amp; UF</string>
+</resources>

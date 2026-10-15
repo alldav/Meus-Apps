@@ -1,0 +1,6 @@
+{
+  "name": "Escala Medina",
+  "description": "Gestão inteligente de escalas (12x36, 6x1, 5x2, 4x2 e personalizadas), controle de folgas trabalhadas (FT), trocas de plantão, feriados nacionais e estaduais do Brasil e assistente de folgas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
