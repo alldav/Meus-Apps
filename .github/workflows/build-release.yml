@@ -5,8 +5,6 @@ on:
     branches:
       - main
       - master
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -20,16 +18,28 @@ jobs:
       - name: Checkout Código-Fonte
         uses: actions/checkout@v4
 
-      - name: Configurar Java 17
+      - name: Configurar Java 21 (Compatível com AGP 9.1+)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
-      - name: Restaurar Keystore Debug
+      - name: Configurar Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Aceitar Licenças do Android SDK
+        run: |
+          yes | sdkmanager --licenses || true
+
+      - name: Restaurar Keystore e Arquivos de Configuração
         run: |
           if [ -f debug.keystore.base64 ]; then
             base64 -d debug.keystore.base64 > debug.keystore
+          fi
+          if [ -f .env.example ]; then
+            cp .env.example .env
+          else
+            touch .env
           fi
 
       - name: Configurar Gradle
@@ -38,7 +48,7 @@ jobs:
       - name: Compilar APK
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --no-configuration-cache --stacktrace
 
       - name: Preparar APK para Download
         run: |
@@ -48,7 +58,7 @@ jobs:
       - name: Publicar Release no GitHub
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
+          tag_name: v1.0.0
           name: "Escala Medina - Versão Mais Recente (APK)"
           draft: false
           prerelease: false
