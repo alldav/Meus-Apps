@@ -215,6 +215,11 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
                 if (showDialogIfAvailable) {
                     _showUpdateDialog.value = true
                 }
+                NotificationHelper.showUpdateNotification(
+                    context = getApplication(),
+                    versionName = result.release.versionName,
+                    notes = result.release.releaseNotes.substringBefore("\n")
+                )
             } else if (result is UpdateCheckState.UpToDate && !silentOnUpToDate) {
                 // Kept as UpToDate state so UI displays it
             }

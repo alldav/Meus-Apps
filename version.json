@@ -1,9 +1,9 @@
 {
-  "versionCode": 1,
-  "versionName": "1.0.0",
+  "versionCode": 2,
+  "versionName": "1.1.0",
   "releaseDate": "15/10/2026",
-  "releaseNotes": "• Versão estável do Escala Medina\n• Gestão de escalas 12x36, 6x1, 5x2, 4x2 e personalizadas\n• Controle de folgas trabalhadas (FT)\n• Feriados nacionais e estaduais do Brasil\n• Atualizador integrado",
-  "downloadUrl": "https://github.com/alldav-am/plantao-folga/releases/latest/download/escala_medina.apk",
+  "releaseNotes": "• Novo seletor de tema Dark (Noturno) e Natural (Claro)\n• Botão de alternância rápida no topo do app\n• Melhorias nas notificações e atualizador inteligente",
+  "downloadUrl": "https://github.com/alldav/Meus-Apps/releases/latest/download/escala_medina.apk",
   "fileSizeBytes": 18000000,
   "isMandatory": false
 }

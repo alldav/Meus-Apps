@@ -51,7 +51,7 @@ class AppUpdateManager(private val context: Context) {
     // Default public endpoint or raw GitHub/hosting URL.
     // If not reachable, fallback to mock demo or user-configured URL.
     companion object {
-        const val DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/alldav-am/plantao-folga/main/version.json"
+        const val DEFAULT_UPDATE_URL = "https://raw.githubusercontent.com/alldav/Meus-Apps/main/version.json"
         const val PREFS_NAME = "app_update_prefs"
         const val KEY_AUTO_CHECK = "auto_check_updates"
         const val KEY_CUSTOM_URL = "custom_update_url"
@@ -64,7 +64,15 @@ class AppUpdateManager(private val context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_AUTO_CHECK, value).apply()
 
     var updateCheckUrl: String
-        get() = prefs.getString(KEY_CUSTOM_URL, DEFAULT_UPDATE_URL) ?: DEFAULT_UPDATE_URL
+        get() {
+            val stored = prefs.getString(KEY_CUSTOM_URL, DEFAULT_UPDATE_URL) ?: DEFAULT_UPDATE_URL
+            return if (stored.contains("alldav-am/plantao-folga")) {
+                prefs.edit().putString(KEY_CUSTOM_URL, DEFAULT_UPDATE_URL).apply()
+                DEFAULT_UPDATE_URL
+            } else {
+                stored
+            }
+        }
         set(value) = prefs.edit().putString(KEY_CUSTOM_URL, value).apply()
 
     val currentVersionName: String

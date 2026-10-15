@@ -64,6 +64,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
+import com.example.data.update.AppUpdateManager
 import com.example.data.update.UpdateCheckState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -784,6 +785,82 @@ fun SettingsScreen(
                         checked = uiState.isAutoCheckEnabled,
                         onCheckedChange = { viewModel.setAutoCheckEnabled(it) },
                         modifier = Modifier.testTag("auto_check_updates_switch")
+                    )
+                }
+
+                // URL de Atualização & Status do Repositório
+                var isEditingUrl by remember { mutableStateOf(false) }
+                var tempUrl by remember(uiState.updateCheckUrl) { mutableStateOf(uiState.updateCheckUrl) }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Servidor GitHub do App",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(onClick = { isEditingUrl = !isEditingUrl }) {
+                            Text(if (isEditingUrl) "Fechar" else "Ver / Editar URL")
+                        }
+                    }
+
+                    if (isEditingUrl) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = tempUrl,
+                            onValueChange = { tempUrl = it },
+                            label = { Text("URL do version.json") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = {
+                                    viewModel.setCustomUpdateUrl(tempUrl)
+                                    isEditingUrl = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Salvar")
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    tempUrl = AppUpdateManager.DEFAULT_UPDATE_URL
+                                    viewModel.setCustomUpdateUrl(AppUpdateManager.DEFAULT_UPDATE_URL)
+                                    isEditingUrl = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Restaurar")
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = uiState.updateCheckUrl,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "💡 Para os celulares baixarem atualizações sem login, o repositório 'Meus-Apps' deve estar como 'Public' no GitHub. Em repositórios privados, o GitHub bloqueia com erro 404.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        lineHeight = 15.sp
                     )
                 }
 

@@ -24,6 +24,7 @@ object NotificationHelper {
     const val CHANNEL_APPOINTMENTS = "channel_appointments"
     const val CHANNEL_SWAPS = "channel_swaps"
     const val CHANNEL_SHIFTS = "channel_shifts"
+    const val CHANNEL_UPDATES = "channel_updates"
 
     const val EXTRA_NOTIFICATION_ID = "extra_notification_id"
     const val EXTRA_CHANNEL_ID = "extra_channel_id"
@@ -64,7 +65,17 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
-            manager.createNotificationChannels(listOf(appointmentsChannel, swapsChannel, shiftsChannel))
+            val updatesChannel = NotificationChannel(
+                CHANNEL_UPDATES,
+                "Atualizações do Aplicativo",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Avisos automáticos quando uma nova versão estiver disponível"
+                enableVibration(true)
+                setShowBadge(true)
+            }
+
+            manager.createNotificationChannels(listOf(appointmentsChannel, swapsChannel, shiftsChannel, updatesChannel))
         }
     }
 
@@ -251,6 +262,16 @@ object NotificationHelper {
             channelId = CHANNEL_APPOINTMENTS,
             title = "🔔 Teste de Notificação - Escala Medina",
             message = "As notificações de plantões, trocas e compromissos estão funcionando com sucesso!"
+        )
+    }
+
+    fun showUpdateNotification(context: Context, versionName: String, notes: String) {
+        showNotification(
+            context = context,
+            notificationId = 10001,
+            channelId = CHANNEL_UPDATES,
+            title = "🚀 Nova Versão $versionName Disponível!",
+            message = "Uma nova atualização do Escala Medina está pronta: $notes"
         )
     }
 
