@@ -35,6 +35,12 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Palette
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.theme.AppThemeMode
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.example.notification.NotificationHelper
@@ -818,6 +824,95 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Card: Aparência & Tema (Dark & Natural)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("theme_settings_card"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            val currentTheme by viewModel.themeMode.collectAsStateWithLifecycle()
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = "Aparência",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Aparência & Tema",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Alterne entre o tema Dark e o tema Natural",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeOptionItem(
+                        title = "Dark",
+                        subtitle = "Noturno",
+                        icon = Icons.Default.DarkMode,
+                        isSelected = currentTheme == AppThemeMode.DARK,
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.setThemeMode(AppThemeMode.DARK) }
+                    )
+
+                    ThemeOptionItem(
+                        title = "Natural",
+                        subtitle = "Claro",
+                        icon = Icons.Default.LightMode,
+                        isSelected = currentTheme == AppThemeMode.NATURAL,
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.setThemeMode(AppThemeMode.NATURAL) }
+                    )
+
+                    ThemeOptionItem(
+                        title = "Sistema",
+                        subtitle = "Auto",
+                        icon = Icons.Default.BrightnessAuto,
+                        isSelected = currentTheme == AppThemeMode.SYSTEM,
+                        modifier = Modifier.weight(1f),
+                        onClick = { viewModel.setThemeMode(AppThemeMode.SYSTEM) }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = when (currentTheme) {
+                        AppThemeMode.DARK -> "🌙 Tema Dark: fundo escuro tático, alto contraste e economia de bateria."
+                        AppThemeMode.NATURAL -> "☀️ Tema Natural: tons claros orgânicos e leitura confortável para o dia."
+                        AppThemeMode.SYSTEM -> "⚙️ Sistema: segue automaticamente o modo claro/escuro do seu celular."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Card: Notificações & Alarmes do Sistema
         Card(
             modifier = Modifier
@@ -970,3 +1065,52 @@ fun SettingsScreen(
         }
     }
 }
+
+@Composable
+private fun ThemeOptionItem(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isSelected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    val bgColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .border(width = if (isSelected) 2.dp else 1.dp, color = borderColor, shape = RoundedCornerShape(12.dp))
+            .background(bgColor)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp, horizontal = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(26.dp)
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+

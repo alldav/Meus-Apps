@@ -10,7 +10,13 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-private val DarkColorScheme = darkColorScheme(
+enum class AppThemeMode(val label: String, val subtitle: String) {
+    DARK("Dark", "Fundo escuro tático, ideal para a noite e economia de bateria"),
+    NATURAL("Natural", "Tons claros naturais e orgânicos com visualização nítida"),
+    SYSTEM("Sistema", "Acompanha o tema claro/escuro configurado no celular")
+}
+
+val DarkColorScheme = darkColorScheme(
     primary = DarkPrimary,
     onPrimary = DarkBackground,
     secondary = DarkSecondary,
@@ -23,7 +29,7 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = DarkOnSurface
 )
 
-private val LightColorScheme = lightColorScheme(
+val NaturalColorScheme = lightColorScheme(
     primary = LightPrimary,
     onPrimary = LightSurface,
     secondary = LightSecondary,
@@ -38,17 +44,24 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun MyApplicationTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Keep consistent tactical theme
+    themeMode: AppThemeMode = AppThemeMode.NATURAL,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val systemDark = isSystemInDarkTheme()
+    val isDark = when (themeMode) {
+        AppThemeMode.DARK -> true
+        AppThemeMode.NATURAL -> false
+        AppThemeMode.SYSTEM -> systemDark
+    }
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        isDark -> DarkColorScheme
+        else -> NaturalColorScheme
     }
 
     MaterialTheme(

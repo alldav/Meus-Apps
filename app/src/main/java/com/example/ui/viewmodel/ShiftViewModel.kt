@@ -1,9 +1,12 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.ui.theme.AppThemeMode
+import kotlinx.coroutines.flow.asStateFlow
 import com.example.notification.NotificationHelper
 import com.example.data.local.AppDatabase
 import com.example.data.local.entities.AppointmentEntity
@@ -58,7 +61,8 @@ data class ShiftUiState(
     val showUpdateDialog: Boolean = false,
     val activeRelease: AppReleaseInfo? = null,
     val isAutoCheckEnabled: Boolean = true,
-    val updateCheckUrl: String = AppUpdateManager.DEFAULT_UPDATE_URL
+    val updateCheckUrl: String = AppUpdateManager.DEFAULT_UPDATE_URL,
+    val themeMode: AppThemeMode = AppThemeMode.NATURAL
 )
 
 class ShiftViewModel(application: Application) : AndroidViewModel(application) {
@@ -80,6 +84,32 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
     private val _isAutoCheckEnabled = MutableStateFlow(updateManager.isAutoCheckEnabled)
     private val _updateCheckUrl = MutableStateFlow(updateManager.updateCheckUrl)
 
+    // Theme mode preference & state
+    private val prefs = application.getSharedPreferences("escala_medina_prefs", Context.MODE_PRIVATE)
+    private val _themeMode = MutableStateFlow(
+        try {
+            val saved = prefs.getString("app_theme_mode", AppThemeMode.NATURAL.name) ?: AppThemeMode.NATURAL.name
+            AppThemeMode.valueOf(saved)
+        } catch (_: Exception) {
+            AppThemeMode.NATURAL
+        }
+    )
+    val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: AppThemeMode) {
+        _themeMode.value = mode
+        prefs.edit().putString("app_theme_mode", mode.name).apply()
+    }
+
+    fun toggleTheme() {
+        val next = when (_themeMode.value) {
+            AppThemeMode.DARK -> AppThemeMode.NATURAL
+            AppThemeMode.NATURAL -> AppThemeMode.DARK
+            AppThemeMode.SYSTEM -> AppThemeMode.DARK
+        }
+        setThemeMode(next)
+    }
+
     val uiState: StateFlow<ShiftUiState> = combine(
         repository.scheduleConfigFlow,
         repository.allOverridesFlow,
@@ -90,7 +120,8 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
         _updateCheckState,
         _downloadState,
         _showUpdateDialog,
-        _activeRelease
+        _activeRelease,
+        _themeMode
     ) { args: Array<Any?> ->
         val config = (args[0] as? ScheduleConfigEntity) ?: ScheduleConfigEntity()
         @Suppress("UNCHECKED_CAST")
@@ -105,6 +136,7 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
         val download = (args[7] as? DownloadState) ?: DownloadState.Idle
         val showDialog = (args[8] as? Boolean) ?: false
         val activeRel = (args[9] as? AppReleaseInfo)
+        val currentTheme = (args[10] as? AppThemeMode) ?: _themeMode.value
 
         val overridesMap = overridesList.associateBy { it.date }
         val today = LocalDate.now()
@@ -150,7 +182,8 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
             showUpdateDialog = showDialog,
             activeRelease = activeRel,
             isAutoCheckEnabled = _isAutoCheckEnabled.value,
-            updateCheckUrl = _updateCheckUrl.value
+            updateCheckUrl = _updateCheckUrl.value,
+            themeMode = currentTheme
         )
     }.stateIn(
         scope = viewModelScope,

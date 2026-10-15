@@ -26,8 +26,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrightnessAuto
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.QueryBuilder
 import androidx.compose.material.icons.filled.Security
@@ -40,7 +43,9 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.example.ui.theme.AppThemeMode
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -101,7 +106,9 @@ class MainActivity : ComponentActivity() {
         NotificationHelper.createNotificationChannels(this)
 
         setContent {
-            MyApplicationTheme {
+            val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+
+            MyApplicationTheme(themeMode = themeMode) {
                 val permissionLauncher = rememberLauncherForActivityResult(
                     contract = ActivityResultContracts.RequestPermission()
                 ) { /* Result handled */ }
@@ -162,6 +169,25 @@ class MainActivity : ComponentActivity() {
                                         style = MaterialTheme.typography.titleLarge,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 20.sp
+                                    )
+                                }
+                            },
+                            actions = {
+                                IconButton(
+                                    onClick = { viewModel.toggleTheme() },
+                                    modifier = Modifier.testTag("theme_toggle_button")
+                                ) {
+                                    Icon(
+                                        imageVector = when (themeMode) {
+                                            AppThemeMode.DARK -> Icons.Filled.LightMode
+                                            AppThemeMode.NATURAL -> Icons.Filled.DarkMode
+                                            AppThemeMode.SYSTEM -> Icons.Filled.BrightnessAuto
+                                        },
+                                        contentDescription = "Alternar Tema: ${themeMode.label}",
+                                        tint = when (themeMode) {
+                                            AppThemeMode.DARK -> MaterialTheme.colorScheme.tertiary
+                                            else -> MaterialTheme.colorScheme.primary
+                                        }
                                     )
                                 }
                             },
