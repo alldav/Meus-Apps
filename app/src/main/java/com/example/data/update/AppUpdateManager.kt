@@ -44,8 +44,10 @@ sealed interface DownloadState {
 class AppUpdateManager(private val context: Context) {
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
     // Default public endpoint or raw GitHub/hosting URL.
@@ -162,6 +164,7 @@ class AppUpdateManager(private val context: Context) {
 
             val request = Request.Builder()
                 .url(release.downloadUrl)
+                .header("Accept", "application/vnd.android.package-archive, application/octet-stream, */*")
                 .build()
 
             val response = try {
@@ -170,38 +173,47 @@ class AppUpdateManager(private val context: Context) {
                 null
             }
 
-            if (response != null && response.isSuccessful && response.body != null) {
-                val body = response.body!!
-                val contentLength = if (body.contentLength() > 0) body.contentLength() else release.fileSizeBytes
-                val inputStream = body.byteStream()
-                val outputStream = FileOutputStream(outputFile)
+            if (response == null || !response.isSuccessful || response.body == null) {
+                val errorCode = response?.code?.toString() ?: "Falha de conexão"
+                onProgress(DownloadState.Error("Não foi possível baixar o instalador ($errorCode). Toque em 'Navegador' para baixar."))
+                return@withContext
+            }
 
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                var totalRead = 0L
+            val body = response.body!!
+            val contentLength = if (body.contentLength() > 0) body.contentLength() else release.fileSizeBytes
+            val inputStream = body.byteStream()
+            val outputStream = FileOutputStream(outputFile)
 
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    totalRead += bytesRead
-                    val progress = if (contentLength > 0) {
-                        ((totalRead * 100) / contentLength).toInt().coerceIn(0, 99)
-                    } else 50
-                    onProgress(DownloadState.Downloading(progress, totalRead, contentLength))
-                }
+            val buffer = ByteArray(8192)
+            var bytesRead: Int
+            var totalRead = 0L
 
-                outputStream.flush()
-                outputStream.close()
-                inputStream.close()
-            } else {
-                // If demo/simulation or external host unreachable:
-                // Provide simulation progress so the user can test the UI interaction seamlessly
-                for (p in listOf(15, 35, 60, 85, 100)) {
-                    kotlinx.coroutines.delay(200)
-                    val currentBytes = (release.fileSizeBytes * p) / 100
-                    onProgress(DownloadState.Downloading(p, currentBytes, release.fileSizeBytes))
-                }
-                // Write a dummy file to test installer invocation
-                outputFile.writeText("PLANTÃO & FOLGA UPDATE SIMULATION APK")
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                outputStream.write(buffer, 0, bytesRead)
+                totalRead += bytesRead
+                val progress = if (contentLength > 0) {
+                    ((totalRead * 100) / contentLength).toInt().coerceIn(0, 99)
+                } else 50
+                onProgress(DownloadState.Downloading(progress, totalRead, contentLength))
+            }
+
+            outputStream.flush()
+            outputStream.close()
+            inputStream.close()
+
+            // Verify file integrity (must be a valid APK zip file)
+            val isValidApk = outputFile.exists() && outputFile.length() > 50_000 && runCatching {
+                val header = ByteArray(4)
+                outputFile.inputStream().use { it.read(header) }
+                // Check ZIP magic header: PK\x03\x04 (0x50, 0x4B, 0x03, 0x04)
+                header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() &&
+                header[2] == 0x03.toByte() && header[3] == 0x04.toByte()
+            }.getOrDefault(false)
+
+            if (!isValidApk) {
+                outputFile.delete()
+                onProgress(DownloadState.Error("O arquivo baixado não é um instalador APK válido. Use o botão 'Navegador' para baixar."))
+                return@withContext
             }
 
             val apkUri = FileProvider.getUriForFile(

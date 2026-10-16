@@ -12,12 +12,20 @@ android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
+  val versionJsonFile = file("${rootDir}/version.json")
+  val autoVersionCode = if (versionJsonFile.exists()) {
+    Regex("\"versionCode\":\\s*(\\d+)").find(versionJsonFile.readText())?.groupValues?.get(1)?.toIntOrNull() ?: 2
+  } else 2
+  val autoVersionName = if (versionJsonFile.exists()) {
+    Regex("\"versionName\":\\s*\"([^\"]+)\"").find(versionJsonFile.readText())?.groupValues?.get(1) ?: "1.1.0"
+  } else "1.1.0"
+
   defaultConfig {
     applicationId = "com.aistudio.plantaofolga.kxmt"
     minSdk = 26
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = autoVersionCode
+    versionName = autoVersionName
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

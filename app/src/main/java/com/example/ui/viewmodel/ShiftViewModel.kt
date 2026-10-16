@@ -3,6 +3,7 @@ package com.example.ui.viewmodel
 import android.app.Application
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ui.theme.AppThemeMode
@@ -195,8 +196,12 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.getOrCreateDefaultConfig()
             evaluateQuickCheck(_quickCheckDate.value)
-            // If auto-check enabled on launch, check quietly
-            if (updateManager.isAutoCheckEnabled) {
+            // If auto-check enabled on launch, check quietly on physical devices
+            val isEmulator = Build.FINGERPRINT.startsWith("generic") ||
+                             Build.MODEL.contains("google_sdk") ||
+                             Build.HARDWARE.contains("goldfish") ||
+                             Build.HARDWARE.contains("ranchu")
+            if (updateManager.isAutoCheckEnabled && !isEmulator) {
                 checkForUpdates(showDialogIfAvailable = true, silentOnUpToDate = true)
             }
         }
