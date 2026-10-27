@@ -39,6 +39,7 @@ import com.example.ui.theme.FolgaGreen
 import com.example.ui.theme.FtAmber
 import com.example.ui.theme.PlantaoBlue
 import com.example.ui.theme.TrocaPurple
+import com.example.ui.theme.TrocaWorkCyan
 import com.example.ui.theme.VacationTeal
 import java.time.LocalDate
 
@@ -58,7 +59,8 @@ fun DayCell(
         DayStatus.OFF -> Triple(FolgaGreen, "Folga", Color.White)
         DayStatus.WORK -> Triple(PlantaoBlue, "Plantão", Color.White)
         DayStatus.FT -> Triple(FtAmber, "FT", Color.White)
-        DayStatus.SWAP -> Triple(TrocaPurple, "Troca", Color.White)
+        DayStatus.SWAP -> Triple(TrocaPurple, "Folga (T)", Color.White)
+        DayStatus.SWAP_WORK -> Triple(TrocaWorkCyan, "Plantão (T)", Color.White)
         DayStatus.VACATION -> Triple(VacationTeal, "Férias", Color.White)
     }
 

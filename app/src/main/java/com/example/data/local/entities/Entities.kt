@@ -23,10 +23,12 @@ data class ScheduleConfigEntity(
     val workDaysCount: Int = 1,
     val offDaysCount: Int = 1,
     // Comma-separated string of 1 (work) and 0 (off) representing the full cycle
-    // e.g. for 3x2: "1,1,1,0,0"
     val customCyclePattern: String = "1,0",
     // For mixed schedules (e.g. 2 day shifts, 2 night shifts)
-    val mixedShiftSequence: String = "DAY,DAY,NIGHT,NIGHT"
+    val mixedShiftSequence: String = "DAY,DAY,NIGHT,NIGHT",
+    val profession: String = "Geral",
+    val roleOrTitle: String = "",
+    val sector: String = ""
 )
 
 @Entity(tableName = "day_overrides")

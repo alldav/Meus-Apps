@@ -15,9 +15,13 @@ val FtAmber = Color(0xFFF59E0B) // Âmbar Dourado para Folga Trabalhada (FT)
 val FtAmberContainer = Color(0xFF78350F)
 val OnFtAmber = Color(0xFFFFFFFF)
 
-val TrocaPurple = Color(0xFF8B5CF6) // Roxo Tático para Troca de Plantão
+val TrocaPurple = Color(0xFF8B5CF6) // Roxo Tático para Folga por Troca
 val TrocaPurpleContainer = Color(0xFF4C1D95)
 val OnTrocaPurple = Color(0xFFFFFFFF)
+
+val TrocaWorkCyan = Color(0xFF06B6D4) // Ciano Tático para Plantão por Troca (Cobrir Colega)
+val TrocaWorkCyanContainer = Color(0xFF164E63)
+val OnTrocaWorkCyan = Color(0xFFFFFFFF)
 
 val VacationTeal = Color(0xFF0EA5E9) // Ciano/Turquesa vibrante para Férias
 val VacationTealContainer = Color(0xFF0369A1)

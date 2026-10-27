@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.ButtonDefaults
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.DayStatus
 import com.example.domain.BrazilianHolidayProvider
+import com.example.domain.ProfessionSpecialDayProvider
 import com.example.domain.ScheduleEngine
 import com.example.ui.components.DayCell
 import com.example.ui.theme.FeriadoGold
@@ -53,6 +55,7 @@ import com.example.ui.theme.FolgaGreen
 import com.example.ui.theme.FtAmber
 import com.example.ui.theme.PlantaoBlue
 import com.example.ui.theme.TrocaPurple
+import com.example.ui.theme.TrocaWorkCyan
 import com.example.ui.theme.VacationTeal
 import com.example.ui.viewmodel.ShiftUiState
 import com.example.ui.viewmodel.ShiftViewModel
@@ -142,13 +145,47 @@ fun CalendarScreen(
                 Text("Marcar Férias", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
 
-            listOf("Todos", "Folgas", "Plantões", "Férias", "FTs", "Feriados").forEach { filter ->
+            listOf("Todos", "Folgas", "Plantões", "Férias", "FTs", "Trocas", "Feriados").forEach { filter ->
                 FilterChip(
                     selected = selectedFilter == filter,
                     onClick = { selectedFilter = filter },
                     label = { Text(filter, fontSize = 11.sp) },
                     modifier = Modifier.testTag("filter_chip_${filter}")
                 )
+            }
+        }
+
+        // Destaque do Dia da Profissão no mês exibido
+        val monthCelebration = remember(uiState.config.profession, currentMonth) {
+            ProfessionSpecialDayProvider.getCelebrationInMonth(uiState.config.profession, currentMonth)
+        }
+        if (monthCelebration != null) {
+            val (celebrationDate, celebration) = monthCelebration
+            androidx.compose.material3.Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clickable { onSelectDate(celebrationDate) }
+                    .testTag("month_profession_celebration_banner"),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = celebration.iconEmoji, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Destaque do Mês: ${celebrationDate.dayOfMonth} de ${currentMonth.month.getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale("pt", "BR"))} — ${celebration.title.replace("🎉 ", "").replace("⭐ ", "").replace("🛡️ ", "")}!",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
             }
         }
 
@@ -227,6 +264,7 @@ fun CalendarScreen(
                                 "Plantões" -> effectiveStatus == DayStatus.WORK
                                 "Férias" -> effectiveStatus == DayStatus.VACATION
                                 "FTs" -> effectiveStatus == DayStatus.FT
+                                "Trocas" -> effectiveStatus == DayStatus.SWAP || effectiveStatus == DayStatus.SWAP_WORK
                                 "Feriados" -> holiday != null
                                 else -> true
                             }
@@ -260,7 +298,7 @@ fun CalendarScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -268,11 +306,12 @@ fun CalendarScreen(
                 LegendIndicator(color = PlantaoBlue, label = "Plantão")
                 LegendIndicator(color = VacationTeal, label = "Férias")
                 LegendIndicator(color = FtAmber, label = "FT")
-                LegendIndicator(color = TrocaPurple, label = "Troca")
+                LegendIndicator(color = TrocaPurple, label = "Folga (T)")
+                LegendIndicator(color = TrocaWorkCyan, label = "Plantão (T)")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Star, contentDescription = null, tint = FeriadoGold, modifier = Modifier.size(12.dp))
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Text("Feriado", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Icon(Icons.Default.Star, contentDescription = null, tint = FeriadoGold, modifier = Modifier.size(11.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text("Feriado", fontSize = 9.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

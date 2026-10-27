@@ -58,8 +58,13 @@ object QuickQueryParser {
             }
             DayStatus.SWAP -> {
                 val partner = overrides[targetDate]?.partnerName
-                val partnerInfo = if (!partner.isNullOrBlank()) " com $partner" else ""
-                "🔄 TROCA DE PLANTÃO! No dia $dateFormatted há uma troca registrada$partnerInfo."
+                val partnerInfo = if (!partner.isNullOrBlank()) " coberta pelo colega $partner" else ""
+                "🎉 FOLGA POR TROCA! No dia $dateFormatted você estará livre da escala$partnerInfo. Bom descanso!"
+            }
+            DayStatus.SWAP_WORK -> {
+                val partner = overrides[targetDate]?.partnerName
+                val partnerInfo = if (!partner.isNullOrBlank()) " no lugar do colega $partner" else ""
+                "🔄 PLANTÃO POR TROCA! No dia $dateFormatted você estará trabalhando$partnerInfo (troca acordada na folga)."
             }
         }
 

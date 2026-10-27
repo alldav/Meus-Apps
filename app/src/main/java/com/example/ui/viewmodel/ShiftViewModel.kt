@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ui.theme.AppThemeMode
 import kotlinx.coroutines.flow.asStateFlow
+import com.example.BuildConfig
 import com.example.notification.NotificationHelper
 import com.example.data.local.AppDatabase
 import com.example.data.local.entities.AppointmentEntity
@@ -17,6 +18,8 @@ import com.example.data.local.entities.VacationPeriodEntity
 import com.example.data.model.BrazilianHoliday
 import com.example.data.model.DayStatus
 import com.example.data.model.MonthSummary
+import com.example.data.model.OfferItem
+import com.example.data.model.ProductRequestItem
 import com.example.data.model.QueryResult
 import com.example.data.model.ScheduleType
 import com.example.data.model.ShiftPeriod
@@ -63,7 +66,11 @@ data class ShiftUiState(
     val activeRelease: AppReleaseInfo? = null,
     val isAutoCheckEnabled: Boolean = true,
     val updateCheckUrl: String = AppUpdateManager.DEFAULT_UPDATE_URL,
-    val themeMode: AppThemeMode = AppThemeMode.NATURAL
+    val themeMode: AppThemeMode = AppThemeMode.NATURAL,
+    val waterConsumedMl: Int = 0,
+    val waterGoalMl: Int = 2000,
+    val waterReminderEnabled: Boolean = false,
+    val isDeveloperMode: Boolean = false
 )
 
 class ShiftViewModel(application: Application) : AndroidViewModel(application) {
@@ -111,6 +118,291 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
         setThemeMode(next)
     }
 
+    // Hydration tracking flows
+    private val todayWaterKey = "water_consumed_${LocalDate.now()}"
+    private val _waterGoalMl = MutableStateFlow(prefs.getInt("water_goal_ml", 2000))
+    val waterGoalMl: StateFlow<Int> = _waterGoalMl.asStateFlow()
+
+    private val _waterConsumedMl = MutableStateFlow(prefs.getInt(todayWaterKey, 0))
+    val waterConsumedMl: StateFlow<Int> = _waterConsumedMl.asStateFlow()
+
+    private val _waterReminderEnabled = MutableStateFlow(prefs.getBoolean("water_reminder_enabled", false))
+    val waterReminderEnabled: StateFlow<Boolean> = _waterReminderEnabled.asStateFlow()
+
+    // Developer / Administrative Mode
+    private val isEmulatorEnv = Build.FINGERPRINT.startsWith("generic") ||
+                              Build.MODEL.contains("google_sdk") ||
+                              Build.HARDWARE.contains("goldfish") ||
+                              Build.HARDWARE.contains("ranchu") ||
+                              BuildConfig.DEBUG
+
+    private val _isDeveloperMode = MutableStateFlow(
+        prefs.getBoolean("developer_mode_unlocked", isEmulatorEnv)
+    )
+    val isDeveloperMode: StateFlow<Boolean> = _isDeveloperMode.asStateFlow()
+
+    fun toggleDeveloperMode(): Boolean {
+        val newVal = !_isDeveloperMode.value
+        _isDeveloperMode.value = newVal
+        prefs.edit().putBoolean("developer_mode_unlocked", newVal).apply()
+        return newVal
+    }
+
+    private val _offersEnabled = MutableStateFlow(prefs.getBoolean("offers_enabled", true))
+    val offersEnabled: StateFlow<Boolean> = _offersEnabled.asStateFlow()
+
+    private val _selectedOfferCategories = MutableStateFlow(
+        prefs.getStringSet("offer_categories", setOf("Eletrônicos", "Perfumes", "Casa", "Moda", "Utilidades", "Saúde & Bem-Estar")) ?: setOf("Eletrônicos", "Perfumes", "Casa", "Moda", "Utilidades", "Saúde & Bem-Estar")
+    )
+    val selectedOfferCategories: StateFlow<Set<String>> = _selectedOfferCategories.asStateFlow()
+
+    private val _selectedOfferMarketplaces = MutableStateFlow(
+        prefs.getStringSet("offer_marketplaces", setOf("Mercado Livre", "Shopee", "Amazon")) ?: setOf("Mercado Livre", "Shopee", "Amazon")
+    )
+    val selectedOfferMarketplaces: StateFlow<Set<String>> = _selectedOfferMarketplaces.asStateFlow()
+
+    private val defaultOffers = emptyList<OfferItem>()
+
+    private val _isLoggedIn = MutableStateFlow(prefs.getBoolean("user_logged_in", false))
+    val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val _currentUserEmail = MutableStateFlow(prefs.getString("current_user_email", "alldav.am@gmail.com"))
+    val currentUserEmail: StateFlow<String?> = _currentUserEmail.asStateFlow()
+
+    private val _isAdminLoggedIn = MutableStateFlow(prefs.getBoolean("admin_logged_in", false))
+    val isAdminLoggedIn: StateFlow<Boolean> = _isAdminLoggedIn.asStateFlow()
+
+    private val _adminEmail = MutableStateFlow(prefs.getString("admin_email", "alldav.am@gmail.com"))
+    val adminEmail: StateFlow<String?> = _adminEmail.asStateFlow()
+
+    fun loginWithGoogle(email: String) {
+        val trimmed = email.trim().lowercase()
+        val isAdmin = (trimmed == "alldav.am@gmail.com" || trimmed.contains("alldav"))
+        _isLoggedIn.value = true
+        _currentUserEmail.value = email.trim()
+        _isAdminLoggedIn.value = isAdmin
+        if (isAdmin) {
+            _isDeveloperMode.value = true
+        }
+        prefs.edit()
+            .putBoolean("user_logged_in", true)
+            .putString("current_user_email", email.trim())
+            .putBoolean("admin_logged_in", isAdmin)
+            .putBoolean("developer_mode_unlocked", isAdmin)
+            .putString("admin_email", if (isAdmin) email.trim() else "alldav.am@gmail.com")
+            .apply()
+    }
+
+    fun logout() {
+        _isLoggedIn.value = false
+        _currentUserEmail.value = null
+        _isAdminLoggedIn.value = false
+        _isDeveloperMode.value = false
+        prefs.edit()
+            .putBoolean("user_logged_in", false)
+            .remove("current_user_email")
+            .putBoolean("admin_logged_in", false)
+            .putBoolean("developer_mode_unlocked", false)
+            .apply()
+    }
+
+    fun loginAsAdmin(email: String) {
+        loginWithGoogle(email)
+    }
+
+    fun logoutAdmin() {
+        logout()
+    }
+
+    private val _activeOffers = MutableStateFlow(loadStoredOffers())
+    val activeOffers: StateFlow<List<OfferItem>> = _activeOffers.asStateFlow()
+
+    private val _productRequests = MutableStateFlow(loadStoredRequests())
+    val productRequests: StateFlow<List<ProductRequestItem>> = _productRequests.asStateFlow()
+
+    fun toggleOffersEnabled(enabled: Boolean) {
+        _offersEnabled.value = enabled
+        prefs.edit().putBoolean("offers_enabled", enabled).apply()
+    }
+
+    fun updateOfferCategories(categories: Set<String>) {
+        _selectedOfferCategories.value = categories
+        prefs.edit().putStringSet("offer_categories", categories).apply()
+    }
+
+    fun updateOfferMarketplaces(marketplaces: Set<String>) {
+        _selectedOfferMarketplaces.value = marketplaces
+        prefs.edit().putStringSet("offer_marketplaces", marketplaces).apply()
+    }
+
+    fun postAdminOffer(title: String, description: String, category: String, marketplace: String, couponCode: String?, affiliateUrl: String, priceTag: String, discountBadge: String, imageUrl: String) {
+        val newOffer = OfferItem(
+            id = "off_${System.currentTimeMillis()}",
+            title = title,
+            description = description,
+            category = category,
+            marketplace = marketplace,
+            couponCode = couponCode?.trim()?.ifBlank { null },
+            affiliateUrl = affiliateUrl,
+            priceTag = priceTag,
+            discountBadge = discountBadge,
+            imageUrl = imageUrl.trim()
+        )
+        val updated = listOf(newOffer) + _activeOffers.value
+        _activeOffers.value = updated
+        saveStoredOffers(updated)
+    }
+
+    fun deleteAdminOffer(id: String) {
+        val updated = _activeOffers.value.filter { it.id != id }
+        _activeOffers.value = updated
+        saveStoredOffers(updated)
+    }
+
+    fun submitProductRequest(productName: String, category: String, userName: String) {
+        if (productName.isBlank()) return
+        val req = ProductRequestItem(
+            id = "req_${System.currentTimeMillis()}",
+            productName = productName.trim(),
+            category = category,
+            userName = userName.trim().ifBlank { "Plantonista" }
+        )
+        val updated = listOf(req) + _productRequests.value
+        _productRequests.value = updated
+        saveStoredRequests(updated)
+    }
+
+    private fun loadStoredOffers(): List<OfferItem> {
+        val jsonStr = prefs.getString("saved_custom_offers", null)
+        if (jsonStr.isNullOrBlank()) return defaultOffers
+        return try {
+            val arr = org.json.JSONArray(jsonStr)
+            val list = mutableListOf<OfferItem>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    OfferItem(
+                        id = obj.optString("id"),
+                        title = obj.optString("title"),
+                        description = obj.optString("description"),
+                        category = obj.optString("category"),
+                        marketplace = obj.optString("marketplace"),
+                        couponCode = obj.optString("couponCode").takeIf { !it.isNullOrBlank() && it != "null" },
+                        affiliateUrl = obj.optString("affiliateUrl"),
+                        priceTag = obj.optString("priceTag"),
+                        discountBadge = obj.optString("discountBadge"),
+                        imageUrl = obj.optString("imageUrl", ""),
+                        postedAt = obj.optLong("postedAt", System.currentTimeMillis())
+                    )
+                )
+            }
+            list
+        } catch (_: Exception) {
+            defaultOffers
+        }
+    }
+
+    private fun saveStoredOffers(list: List<OfferItem>) {
+        try {
+            val arr = org.json.JSONArray()
+            for (item in list) {
+                val obj = org.json.JSONObject().apply {
+                    put("id", item.id)
+                    put("title", item.title)
+                    put("description", item.description)
+                    put("category", item.category)
+                    put("marketplace", item.marketplace)
+                    put("couponCode", item.couponCode ?: "")
+                    put("affiliateUrl", item.affiliateUrl)
+                    put("priceTag", item.priceTag)
+                    put("discountBadge", item.discountBadge)
+                    put("imageUrl", item.imageUrl)
+                    put("postedAt", item.postedAt)
+                }
+                arr.put(obj)
+            }
+            prefs.edit().putString("saved_custom_offers", arr.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    private fun loadStoredRequests(): List<ProductRequestItem> {
+        val jsonStr = prefs.getString("saved_product_requests", null)
+        if (jsonStr.isNullOrBlank()) return emptyList()
+        return try {
+            val arr = org.json.JSONArray(jsonStr)
+            val list = mutableListOf<ProductRequestItem>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    ProductRequestItem(
+                        id = obj.optString("id"),
+                        productName = obj.optString("productName"),
+                        category = obj.optString("category"),
+                        userName = obj.optString("userName"),
+                        createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                    )
+                )
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveStoredRequests(list: List<ProductRequestItem>) {
+        try {
+            val arr = org.json.JSONArray()
+            for (item in list) {
+                val obj = org.json.JSONObject().apply {
+                    put("id", item.id)
+                    put("productName", item.productName)
+                    put("category", item.category)
+                    put("userName", item.userName)
+                    put("createdAt", item.createdAt)
+                }
+                arr.put(obj)
+            }
+            prefs.edit().putString("saved_product_requests", arr.toString()).apply()
+        } catch (_: Exception) {}
+    }
+
+    fun addWater(ml: Int) {
+        val todayKey = "water_consumed_${LocalDate.now()}"
+        val updated = (_waterConsumedMl.value + ml).coerceAtLeast(0)
+        _waterConsumedMl.value = updated
+        prefs.edit().putInt(todayKey, updated).apply()
+    }
+
+    fun resetWater() {
+        val todayKey = "water_consumed_${LocalDate.now()}"
+        _waterConsumedMl.value = 0
+        prefs.edit().putInt(todayKey, 0).apply()
+    }
+
+    fun setWaterGoal(goalMl: Int) {
+        _waterGoalMl.value = goalMl
+        prefs.edit().putInt("water_goal_ml", goalMl).apply()
+    }
+
+    fun toggleWaterReminder(enabled: Boolean) {
+        _waterReminderEnabled.value = enabled
+        prefs.edit().putBoolean("water_reminder_enabled", enabled).apply()
+        val context = getApplication<Application>()
+        if (enabled) {
+            NotificationHelper.scheduleWaterReminder(context, 2)
+        } else {
+            NotificationHelper.cancelWaterReminder(context)
+        }
+    }
+
+    fun sendTestWaterNotification() {
+        NotificationHelper.sendWaterReminderNotification(
+            context = getApplication(),
+            currentMl = _waterConsumedMl.value,
+            goalMl = _waterGoalMl.value
+        )
+    }
+
     val uiState: StateFlow<ShiftUiState> = combine(
         repository.scheduleConfigFlow,
         repository.allOverridesFlow,
@@ -122,7 +414,11 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
         _downloadState,
         _showUpdateDialog,
         _activeRelease,
-        _themeMode
+        _themeMode,
+        _waterConsumedMl,
+        _waterGoalMl,
+        _waterReminderEnabled,
+        _isDeveloperMode
     ) { args: Array<Any?> ->
         val config = (args[0] as? ScheduleConfigEntity) ?: ScheduleConfigEntity()
         @Suppress("UNCHECKED_CAST")
@@ -138,6 +434,10 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
         val showDialog = (args[8] as? Boolean) ?: false
         val activeRel = (args[9] as? AppReleaseInfo)
         val currentTheme = (args[10] as? AppThemeMode) ?: _themeMode.value
+        val waterConsumed = (args[11] as? Int) ?: 0
+        val waterGoal = (args[12] as? Int) ?: 2000
+        val waterReminder = (args[13] as? Boolean) ?: false
+        val devMode = (args[14] as? Boolean) ?: false
 
         val overridesMap = overridesList.associateBy { it.date }
         val today = LocalDate.now()
@@ -184,7 +484,11 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
             activeRelease = activeRel,
             isAutoCheckEnabled = _isAutoCheckEnabled.value,
             updateCheckUrl = _updateCheckUrl.value,
-            themeMode = currentTheme
+            themeMode = currentTheme,
+            waterConsumedMl = waterConsumed,
+            waterGoalMl = waterGoal,
+            waterReminderEnabled = waterReminder,
+            isDeveloperMode = devMode
         )
     }.stateIn(
         scope = viewModelScope,
@@ -264,6 +568,12 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissUpdateDialog() {
         _showUpdateDialog.value = false
+        _updateCheckState.value = UpdateCheckState.Idle
+        _downloadState.value = DownloadState.Idle
+    }
+
+    fun dismissUpdateBanner() {
+        _updateCheckState.value = UpdateCheckState.Idle
     }
 
     fun setAutoCheckEnabled(enabled: Boolean) {
@@ -340,7 +650,10 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
         uf: String,
         workCount: Int = 1,
         offCount: Int = 1,
-        customPattern: String = "1,0"
+        customPattern: String = "1,0",
+        profession: String = "Geral",
+        roleOrTitle: String = "",
+        sector: String = ""
     ) {
         viewModelScope.launch {
             val updatedConfig = ScheduleConfigEntity(
@@ -356,9 +669,18 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
                 selectedUf = uf,
                 workDaysCount = workCount,
                 offDaysCount = offCount,
-                customCyclePattern = customPattern
+                customCyclePattern = customPattern,
+                profession = profession.trim().ifBlank { "Geral" },
+                roleOrTitle = roleOrTitle.trim(),
+                sector = sector.trim()
             )
             repository.saveScheduleConfig(updatedConfig)
+        }
+    }
+
+    fun updateProfessionProfile(profession: String, roleOrTitle: String, sector: String) {
+        viewModelScope.launch {
+            repository.updateProfessionProfile(profession, roleOrTitle, sector)
         }
     }
 
@@ -400,21 +722,28 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
 
     fun registerSwap(
         date: LocalDate,
+        targetStatus: DayStatus = DayStatus.SWAP,
         partnerName: String?,
         notes: String?,
         paybackDate: LocalDate? = null
     ) {
         viewModelScope.launch {
-            val override = DayOverrideEntity(
-                date = date,
-                status = DayStatus.SWAP,
+            val compensationLabel = if (paybackDate != null) {
+                if (targetStatus == DayStatus.SWAP_WORK) {
+                    "Devolução: ${paybackDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))}"
+                } else {
+                    "Pagar em: ${paybackDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))}"
+                }
+            } else null
+
+            repository.saveSwapWithPayback(
+                mainDate = date,
+                mainStatus = targetStatus,
                 partnerName = partnerName,
-                extraValueOrLocation = paybackDate?.let { "Pagar em: ${it.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))}" },
+                extraValueOrLocation = compensationLabel,
                 notes = notes,
-                paybackDate = paybackDate,
-                paybackCompleted = false
+                paybackDate = paybackDate
             )
-            repository.saveDayOverride(override)
 
             if (paybackDate != null) {
                 NotificationHelper.scheduleSwapPaybackNotification(
@@ -443,8 +772,13 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
     fun removeOverride(date: LocalDate) {
         viewModelScope.launch {
             val override = repository.getOverrideForDate(date)
-            override?.paybackDate?.let { paybackDate ->
+            val paybackDate = override?.paybackDate
+            if (paybackDate != null) {
                 NotificationHelper.cancelSwapPaybackNotification(getApplication(), paybackDate)
+                val reciprocal = repository.getOverrideForDate(paybackDate)
+                if (reciprocal != null && reciprocal.paybackDate == date) {
+                    repository.removeDayOverride(paybackDate)
+                }
             }
             repository.removeDayOverride(date)
         }
@@ -516,8 +850,11 @@ class ShiftViewModel(application: Application) : AndroidViewModel(application) {
         uf: String,
         workCount: Int = 1,
         offCount: Int = 1,
-        customPattern: String = "1,0"
-    ) = saveScheduleConfig(userName, type, refDate, refIsWork, period, startTime, endTime, uf, workCount, offCount, customPattern)
+        customPattern: String = "1,0",
+        profession: String = "Geral",
+        roleOrTitle: String = "",
+        sector: String = ""
+    ) = saveScheduleConfig(userName, type, refDate, refIsWork, period, startTime, endTime, uf, workCount, offCount, customPattern, profession, roleOrTitle, sector)
 
     fun skipOnboardingWithDefault() {
         saveScheduleConfig(

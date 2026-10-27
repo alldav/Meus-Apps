@@ -59,6 +59,7 @@ import com.example.ui.theme.FolgaGreen
 import com.example.ui.theme.FtAmber
 import com.example.ui.theme.PlantaoBlue
 import com.example.ui.theme.TrocaPurple
+import com.example.ui.theme.TrocaWorkCyan
 import com.example.ui.theme.VacationTeal
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -74,6 +75,7 @@ fun DayDetailBottomSheet(
     holiday: BrazilianHoliday?,
     override: DayOverrideEntity?,
     appointments: List<AppointmentEntity>,
+    profession: String = "",
     onDismiss: () -> Unit,
     onAddAppointment: () -> Unit,
     onMarkFt: () -> Unit,
@@ -88,7 +90,8 @@ fun DayDetailBottomSheet(
         DayStatus.OFF -> Triple(FolgaGreen, "FOLGA GARANTIDA 🎉", Icons.Default.EventAvailable)
         DayStatus.WORK -> Triple(PlantaoBlue, "PLANTÃO DE ESCALA 🛡️", Icons.Default.EventBusy)
         DayStatus.FT -> Triple(FtAmber, "FOLGA TRABALHADA (FT) 💼", Icons.Default.Paid)
-        DayStatus.SWAP -> Triple(TrocaPurple, "TROCA DE PLANTÃO 🔄", Icons.Default.SwapHoriz)
+        DayStatus.SWAP -> Triple(TrocaPurple, "FOLGA POR TROCA 🔄", Icons.Default.SwapHoriz)
+        DayStatus.SWAP_WORK -> Triple(TrocaWorkCyan, "PLANTÃO POR TROCA 🔄", Icons.Default.SwapHoriz)
         DayStatus.VACATION -> Triple(VacationTeal, "EM PERÍODO DE FÉRIAS 🏖️", Icons.Default.EventAvailable)
     }
 
@@ -180,22 +183,68 @@ fun DayDetailBottomSheet(
                 }
             }
 
+            // Profession Special Day Celebration
+            val celebration = com.example.domain.ProfessionSpecialDayProvider.checkCelebrationForToday(profession, date)
+            if (celebration != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = celebration.iconEmoji, fontSize = 28.sp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = celebration.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = celebration.message,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Override Details if FT or Swap
             if (override != null) {
+                val isFt = override.status == DayStatus.FT
+                val isSwapWork = override.status == DayStatus.SWAP_WORK
+                val overrideColor = when {
+                    isFt -> FtAmber
+                    isSwapWork -> TrocaWorkCyan
+                    else -> TrocaPurple
+                }
+                val overrideTitle = when {
+                    isFt -> "Detalhes da Folga Trabalhada (FT)"
+                    isSwapWork -> "Detalhes do Plantão Atípico (Trocou Folga)"
+                    else -> "Detalhes da Troca de Plantão"
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
-                        containerColor = (if (override.status == DayStatus.FT) FtAmber else TrocaPurple).copy(alpha = 0.12f)
+                        containerColor = overrideColor.copy(alpha = 0.12f)
                     ),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = if (override.status == DayStatus.FT) "Detalhes da Folga Trabalhada" else "Detalhes da Troca de Plantão",
+                            text = overrideTitle,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
-                            color = if (override.status == DayStatus.FT) FtAmber else TrocaPurple
+                            color = overrideColor
                         )
                         if (!override.partnerName.isNullOrBlank()) {
                             Text(
@@ -212,11 +261,12 @@ fun DayDetailBottomSheet(
                             )
                         }
                         if (override.paybackDate != null) {
+                            val paybackLabel = if (isSwapWork) "Devolução pelo colega em:" else "Pagar ao colega em:"
                             Text(
-                                text = "Pagar em: ${override.paybackDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy (EEEE)", java.util.Locale("pt", "BR")))} ${if (override.paybackCompleted) "✓ (Pago)" else "(Pendente)"}",
+                                text = "$paybackLabel ${override.paybackDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy (EEEE)", java.util.Locale("pt", "BR")))} ${if (override.paybackCompleted) "✓ (Cumprido)" else "(Pendente)"}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (override.paybackCompleted) FolgaGreen else TrocaPurple
+                                color = if (override.paybackCompleted) FolgaGreen else overrideColor
                             )
                         }
                         if (!override.notes.isNullOrBlank()) {
@@ -275,7 +325,19 @@ fun DayDetailBottomSheet(
                     ) {
                         Icon(Icons.Default.Paid, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Fazer FT", fontSize = 12.sp)
+                        Text("Fazer FT", fontSize = 11.sp, maxLines = 1)
+                    }
+
+                    FilledTonalButton(
+                        onClick = onMarkSwap,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("mark_swap_off_sheet_button"),
+                        colors = ButtonDefaults.filledTonalButtonColors(containerColor = TrocaWorkCyan.copy(alpha = 0.2f), contentColor = TrocaWorkCyan)
+                    ) {
+                        Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Trocar Folga", fontSize = 11.sp, maxLines = 1)
                     }
                 } else if (status == DayStatus.WORK) {
                     FilledTonalButton(
@@ -287,7 +349,7 @@ fun DayDetailBottomSheet(
                     ) {
                         Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Trocar", fontSize = 12.sp)
+                        Text("Trocar Plantão", fontSize = 11.sp, maxLines = 1)
                     }
                 }
             }

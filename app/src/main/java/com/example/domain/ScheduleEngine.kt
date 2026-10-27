@@ -139,7 +139,7 @@ object ScheduleEngine {
         var count = 0
         while (count < 60) {
             val status = calculateEffectiveStatus(cursor, config, overrides[cursor], vacations)
-            if (status == DayStatus.OFF || status == DayStatus.VACATION) {
+            if (status == DayStatus.OFF || status == DayStatus.VACATION || status == DayStatus.SWAP) {
                 return cursor
             }
             cursor = cursor.plusDays(1)
@@ -165,9 +165,9 @@ object ScheduleEngine {
                 val sunday = cursor.plusDays(1)
                 val satStatus = calculateEffectiveStatus(cursor, config, overrides[cursor], vacations)
                 val sunStatus = calculateEffectiveStatus(sunday, config, overrides[sunday], vacations)
-                if ((satStatus == DayStatus.OFF || satStatus == DayStatus.VACATION) &&
-                    (sunStatus == DayStatus.OFF || sunStatus == DayStatus.VACATION)
-                ) {
+                val isSatOff = satStatus == DayStatus.OFF || satStatus == DayStatus.VACATION || satStatus == DayStatus.SWAP
+                val isSunOff = sunStatus == DayStatus.OFF || sunStatus == DayStatus.VACATION || sunStatus == DayStatus.SWAP
+                if (isSatOff && isSunOff) {
                     return Pair(cursor, sunday)
                 }
             }
@@ -189,7 +189,7 @@ object ScheduleEngine {
         var attempts = 0
         while (attempts < 120) {
             val status = calculateEffectiveStatus(cursor, config, overrides[cursor], vacations)
-            if (status == DayStatus.WORK || status == DayStatus.FT) {
+            if (status == DayStatus.WORK || status == DayStatus.FT || status == DayStatus.SWAP_WORK) {
                 return cursor
             }
             cursor = cursor.plusDays(1)

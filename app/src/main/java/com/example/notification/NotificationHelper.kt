@@ -25,6 +25,7 @@ object NotificationHelper {
     const val CHANNEL_SWAPS = "channel_swaps"
     const val CHANNEL_SHIFTS = "channel_shifts"
     const val CHANNEL_UPDATES = "channel_updates"
+    const val CHANNEL_HYDRATION = "channel_hydration"
 
     const val EXTRA_NOTIFICATION_ID = "extra_notification_id"
     const val EXTRA_CHANNEL_ID = "extra_channel_id"
@@ -75,7 +76,17 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
-            manager.createNotificationChannels(listOf(appointmentsChannel, swapsChannel, shiftsChannel, updatesChannel))
+            val hydrationChannel = NotificationChannel(
+                CHANNEL_HYDRATION,
+                "Lembrete de Água & Saúde",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Lembretes periódicos para se manter hidratado durante o plantão"
+                enableVibration(true)
+                setShowBadge(true)
+            }
+
+            manager.createNotificationChannels(listOf(appointmentsChannel, swapsChannel, shiftsChannel, updatesChannel, hydrationChannel))
         }
     }
 
@@ -318,5 +329,79 @@ object NotificationHelper {
         } catch (_: SecurityException) {
             // Handled if permission revoked
         }
+    }
+
+    fun sendWaterReminderNotification(context: Context, currentMl: Int, goalMl: Int) {
+        if (!hasNotificationPermission(context)) return
+
+        val percent = if (goalMl > 0) (currentMl * 100 / goalMl).coerceIn(0, 100) else 0
+        val title = "💧 Hora de Beber Água!"
+        val message = "Você já bebeu $currentMl ml da sua meta de $goalMl ml ($percent%). Beba um copo agora para manter o corpo hidratado e a mente focada no plantão!"
+
+        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            9998,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_HYDRATION)
+            .setSmallIcon(R.drawable.ic_app_icon)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        try {
+            NotificationManagerCompat.from(context).notify(9998, notification)
+        } catch (_: SecurityException) {}
+    }
+
+    fun scheduleWaterReminder(context: Context, intervalHours: Int = 2) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, NotificationReceiver::class.java).apply {
+            putExtra(EXTRA_NOTIFICATION_ID, 9998)
+            putExtra(EXTRA_CHANNEL_ID, CHANNEL_HYDRATION)
+            putExtra(EXTRA_TITLE, "💧 Hora de Beber Água!")
+            putExtra(EXTRA_MESSAGE, "Hidrate-se! Um copo de água agora renova a energia, previne cansaço e dores de cabeça no seu plantão.")
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            9998,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val triggerAt = System.currentTimeMillis() + (intervalHours * 3600 * 1000L)
+        try {
+            alarmManager.setInexactRepeating(
+                AlarmManager.RTC_WAKEUP,
+                triggerAt,
+                intervalHours * 3600 * 1000L,
+                pendingIntent
+            )
+        } catch (_: Exception) {}
+    }
+
+    fun cancelWaterReminder(context: Context) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, NotificationReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            9998,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        try {
+            alarmManager.cancel(pendingIntent)
+        } catch (_: Exception) {}
     }
 }

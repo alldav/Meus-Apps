@@ -1,9 +1,9 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1.0",
-  "releaseDate": "15/10/2026",
-  "releaseNotes": "• Novo seletor de tema Dark (Noturno) e Natural (Claro)\n• Botão de alternância rápida no topo do app\n• Melhorias nas notificações e atualizador inteligente",
+  "versionCode": 3,
+  "versionName": "1.2.0",
+  "releaseDate": "16/10/2026",
+  "releaseNotes": "• Permuta flexível no dia de Folga ou Plantão com compensação automática\n• Perfil profissional com Profissão, Cargo e Setor\n• Homenagem no Dia da Profissão e Dicas 'Você Sabia' na tela inicial\n• Seletor de Tema Dark / Natural e correções no atualizador",
   "downloadUrl": "https://github.com/alldav/Meus-Apps/releases/latest/download/escala_medina.apk",
-  "fileSizeBytes": 18000000,
+  "fileSizeBytes": 18500000,
   "isMandatory": false
 }

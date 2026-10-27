@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Info
@@ -44,10 +45,17 @@ import com.example.ui.theme.AppThemeMode
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.example.notification.NotificationHelper
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import com.example.ui.dialogs.PixSupportDialog
+import com.example.ui.dialogs.FeedbackDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -83,6 +91,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ScheduleType
 import com.example.data.model.ShiftPeriod
 import com.example.domain.BrazilianHolidayProvider
+import com.example.domain.ProfessionSpecialDayProvider
 import com.example.domain.ScheduleEngine
 import com.example.ui.components.WeekCycleCalendarSelector
 import com.example.ui.theme.FolgaGreen
@@ -104,6 +113,7 @@ fun SettingsScreen(
     onSaved: () -> Unit
 ) {
     val config = uiState.config
+    val context = LocalContext.current
 
     var userName by remember(config) { mutableStateOf(config.userName) }
     var selectedType by remember(config) { mutableStateOf(config.scheduleType) }
@@ -127,6 +137,14 @@ fun SettingsScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var ufDropdownExpanded by remember { mutableStateOf(false) }
 
+    var profession by remember(config) { mutableStateOf(config.profession) }
+    var professionDropdownExpanded by remember { mutableStateOf(false) }
+
+    var adminModeEnabled by remember { mutableStateOf(false) }
+    var versionTapCount by remember { mutableIntStateOf(0) }
+    var showPixDialog by remember { mutableStateOf(false) }
+    var showFeedbackDialog by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -134,6 +152,58 @@ fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        val currentUserEmail by viewModel.currentUserEmail.collectAsStateWithLifecycle()
+        val isAdminLoggedIn by viewModel.isAdminLoggedIn.collectAsStateWithLifecycle()
+
+        // Google Account / Session Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Person, contentDescription = null, tint = Color.White)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = currentUserEmail ?: "Usuário",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = if (isAdminLoggedIn) "Administrador do Clube" else "Plantonista Conectado",
+                                fontSize = 12.sp,
+                                color = if (isAdminLoggedIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { viewModel.logout() },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Sair")
+                    }
+                }
+            }
+        }
+
         // Quick Action: Assistente Passo a Passo
         Card(
             modifier = Modifier
@@ -164,19 +234,27 @@ fun SettingsScreen(
             }
         }
 
-        // Section: Identificação
+        // Section: Identificação & Perfil Profissional
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(16.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Text(
-                    text = "Identificação",
+                    text = "Identificação & Perfil Profissional",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Informe sua profissão para receber homenagens no seu dia comemorativo e dicas personalizadas de ergonomia e saúde.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 OutlinedTextField(
                     value = userName,
                     onValueChange = { userName = it },
@@ -184,6 +262,51 @@ fun SettingsScreen(
                     leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = professionDropdownExpanded,
+                    onExpandedChange = { professionDropdownExpanded = !professionDropdownExpanded },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = profession,
+                        onValueChange = { profession = it },
+                        label = { Text("Profissão (ou digite a sua)") },
+                        placeholder = { Text("Ex: Vigilante, Porteiro, Controlador de Acesso...") },
+                        leadingIcon = { Icon(Icons.Default.Work, contentDescription = null) },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = professionDropdownExpanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        singleLine = true
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = professionDropdownExpanded,
+                        onDismissRequest = { professionDropdownExpanded = false }
+                    ) {
+                        ProfessionSpecialDayProvider.RECOGNIZED_PROFESSIONS.forEach { prof ->
+                            DropdownMenuItem(
+                                text = { Text(prof) },
+                                onClick = {
+                                    if (prof.contains("Outra profissão")) {
+                                        profession = ""
+                                    } else {
+                                        profession = prof
+                                    }
+                                    professionDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = "💡 Você pode escolher uma das profissões sugeridas acima ou digitar livremente a sua profissão.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp
                 )
             }
         }
@@ -594,7 +717,8 @@ fun SettingsScreen(
                     uf = selectedUf,
                     workCount = customWorkCount,
                     offCount = customOffCount,
-                    customPattern = customPatternString
+                    customPattern = customPatternString,
+                    profession = profession.trim().ifBlank { "Geral / Plantonista" }
                 )
                 onSaved()
             },
@@ -641,9 +765,22 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Versão Atual: v${viewModel.updateManager.currentVersionName} (Build ${viewModel.updateManager.currentVersionCode})",
+                            text = "Versão: v${viewModel.updateManager.currentVersionName} (Build ${viewModel.updateManager.currentVersionCode})" + if (adminModeEnabled) " • [Admin Ativo]" else "",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (adminModeEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (adminModeEnabled) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier.clickable {
+                                versionTapCount++
+                                if (versionTapCount >= 5) {
+                                    adminModeEnabled = !adminModeEnabled
+                                    versionTapCount = 0
+                                    Toast.makeText(
+                                        context,
+                                        if (adminModeEnabled) "🛠️ Modo Administrador ativado! Ferramentas de teste liberadas." else "Modo Administrador desativado.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
                         )
                     }
                 }
@@ -750,19 +887,6 @@ fun SettingsScreen(
                     Text("Verificar Atualizações Agora", fontWeight = FontWeight.SemiBold)
                 }
 
-                // Test / Simulation Button
-                OutlinedButton(
-                    onClick = { viewModel.simulateUpdateForTesting() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("simulate_update_button"),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Testar Tela de Atualização (Simulação)")
-                }
-
                 // Auto-check Switch
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -788,83 +912,7 @@ fun SettingsScreen(
                     )
                 }
 
-                // URL de Atualização & Status do Repositório
-                var isEditingUrl by remember { mutableStateOf(false) }
-                var tempUrl by remember(uiState.updateCheckUrl) { mutableStateOf(uiState.updateCheckUrl) }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                        .padding(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Servidor GitHub do App",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        TextButton(onClick = { isEditingUrl = !isEditingUrl }) {
-                            Text(if (isEditingUrl) "Fechar" else "Ver / Editar URL")
-                        }
-                    }
-
-                    if (isEditingUrl) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        OutlinedTextField(
-                            value = tempUrl,
-                            onValueChange = { tempUrl = it },
-                            label = { Text("URL do version.json") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodySmall
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    viewModel.setCustomUpdateUrl(tempUrl)
-                                    isEditingUrl = false
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Salvar")
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    tempUrl = AppUpdateManager.DEFAULT_UPDATE_URL
-                                    viewModel.setCustomUpdateUrl(AppUpdateManager.DEFAULT_UPDATE_URL)
-                                    isEditingUrl = false
-                                },
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text("Restaurar")
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = uiState.updateCheckUrl,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "💡 Para os celulares baixarem atualizações sem login, o repositório 'Meus-Apps' deve estar como 'Public' no GitHub. Em repositórios privados, o GitHub bloqueia com erro 404.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        lineHeight = 15.sp
-                    )
-                }
-
-                // Safe update educational tip
+                // Safe update educational tip for users
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -889,10 +937,181 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Ao atualizar o aplicativo por um novo APK, o sistema Android instala a nova versão preservando 100% dos seus dados (escalas, histórico de plantões, trocas FT e férias continuam salvos).",
+                            text = "O Escala Medina é um aplicativo independente, distribuído diretamente sem passar pela loja Google Play. O próprio aplicativo verifica pela internet se há novidades publicadas pelo desenvolvedor. Ao atualizar por um novo APK, o sistema Android instala a nova versão preservando 100% dos seus dados (escalas, histórico de plantões, trocas FT e férias continuam salvos).",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 18.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Section: Painel Administrativo do Desenvolvedor (Visível apenas em Modo Admin)
+        if (adminModeEnabled) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("admin_tools_card"),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = RoundedCornerShape(16.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFF59E0B))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFF59E0B).copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Build, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Painel do Administrador", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                Text("Ferramentas exclusivas do desenvolvedor", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        TextButton(onClick = { adminModeEnabled = false }) {
+                            Text("Fechar", fontSize = 12.sp)
+                        }
+                    }
+
+                    Text(
+                        text = "Essas funções são administrativas e não aparecem para os usuários comuns. Use-as para testar telas de atualização, notificações e URLs do servidor antes de disponibilizar aos demais.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+
+                    // Test / Simulation Button
+                    OutlinedButton(
+                        onClick = { viewModel.simulateUpdateForTesting() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("simulate_update_button"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.SystemUpdate, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Testar Tela de Atualização (Simulação)")
+                    }
+
+                    // Test Notifications
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.sendTestNotification()
+                                Toast.makeText(context, "Notificação de plantão/alerta enviada!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Testar Alerta", fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.sendTestWaterNotification()
+                                Toast.makeText(context, "Lembrete de hidratação enviado!", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.WaterDrop, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Testar Água", fontSize = 12.sp)
+                        }
+                    }
+
+                    // URL de Atualização & Status do Repositório GitHub
+                    var isEditingUrl by remember { mutableStateOf(false) }
+                    var tempUrl by remember(uiState.updateCheckUrl) { mutableStateOf(uiState.updateCheckUrl) }
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                            .padding(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Servidor GitHub do App",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            TextButton(onClick = { isEditingUrl = !isEditingUrl }) {
+                                Text(if (isEditingUrl) "Fechar" else "Ver / Editar URL")
+                            }
+                        }
+
+                        if (isEditingUrl) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            OutlinedTextField(
+                                value = tempUrl,
+                                onValueChange = { tempUrl = it },
+                                label = { Text("URL do version.json") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = {
+                                        viewModel.setCustomUpdateUrl(tempUrl)
+                                        isEditingUrl = false
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Salvar")
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        tempUrl = AppUpdateManager.DEFAULT_UPDATE_URL
+                                        viewModel.setCustomUpdateUrl(AppUpdateManager.DEFAULT_UPDATE_URL)
+                                        isEditingUrl = false
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Restaurar")
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = uiState.updateCheckUrl,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "💡 Para os celulares baixarem atualizações sem login, o repositório 'Meus-Apps' deve estar como 'Public' no GitHub. Em repositórios privados, o GitHub bloqueia com erro 404.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            lineHeight = 15.sp
                         )
                     }
                 }
@@ -1092,27 +1311,104 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        viewModel.sendTestNotification()
-                        Toast.makeText(context, "Notificação de teste enviada!", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("test_notification_button")
-                ) {
-                    Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Disparar Notificação de Teste")
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text("💧", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Meta de Hidratação: Lembrete periódico a cada 2 horas no plantão (ativado no card de hidratação da tela inicial).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Card: Apoio & Sugestões ao Desenvolvedor
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("support_and_feedback_settings_card"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF10B981).copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Favorite,
+                            contentDescription = null,
+                            tint = Color(0xFF10B981),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Apoiar o Desenvolvedor",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Chave Pix e Envio de Sugestões",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Gostou do aplicativo e quer incentivar o desenvolvimento independente? Apoie com qualquer valor via Pix ou envie sugestões de melhorias para as próximas versões!",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = { showPixDialog = true },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("settings_open_pix_dialog_btn"),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Apoiar com Pix", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = { showFeedbackDialog = true },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("settings_open_feedback_dialog_btn"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Enviar Sugestão", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 
     // Material 3 DatePickerDialog for Reference Date
@@ -1140,6 +1436,14 @@ fun SettingsScreen(
         ) {
             DatePicker(state = datePickerState)
         }
+    }
+
+    if (showPixDialog) {
+        PixSupportDialog(onDismiss = { showPixDialog = false })
+    }
+
+    if (showFeedbackDialog) {
+        FeedbackDialog(onDismiss = { showFeedbackDialog = false })
     }
 }
 

@@ -33,13 +33,14 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.QueryBuilder
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Paid
 import androidx.compose.material.icons.outlined.QueryBuilder
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.LocalOffer
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -79,7 +80,9 @@ import com.example.ui.dialogs.UpdateDialog
 import com.example.ui.dialogs.VacationDialog
 import com.example.ui.screens.CalendarScreen
 import com.example.ui.screens.DashboardScreen
+import com.example.ui.screens.OffersScreen
 import com.example.ui.screens.QuickCheckScreen
+import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.ReportsScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.MyApplicationTheme
@@ -92,6 +95,7 @@ enum class AppScreen(val title: String, val selectedIcon: ImageVector, val unsel
     CALENDAR("Calendário", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
     SIMULATOR("Simulador", Icons.Filled.QueryBuilder, Icons.Outlined.QueryBuilder),
     REPORTS("Relatório FT", Icons.Filled.Paid, Icons.Outlined.Paid),
+    OFFERS("Ofertas", Icons.Filled.LocalOffer, Icons.Outlined.LocalOffer),
     SETTINGS("Escalas", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
@@ -122,7 +126,21 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+                val offersEnabled by viewModel.offersEnabled.collectAsStateWithLifecycle()
+                val screens = remember(offersEnabled) {
+                    if (offersEnabled) {
+                        listOf(AppScreen.DASHBOARD, AppScreen.CALENDAR, AppScreen.SIMULATOR, AppScreen.REPORTS, AppScreen.OFFERS, AppScreen.SETTINGS)
+                    } else {
+                        listOf(AppScreen.DASHBOARD, AppScreen.CALENDAR, AppScreen.SIMULATOR, AppScreen.REPORTS, AppScreen.SETTINGS)
+                    }
+                }
                 var currentScreen by remember { mutableStateOf(AppScreen.DASHBOARD) }
+
+                LaunchedEffect(offersEnabled) {
+                    if (!offersEnabled && currentScreen == AppScreen.OFFERS) {
+                        currentScreen = AppScreen.DASHBOARD
+                    }
+                }
 
                 var showDayDetailSheet by remember { mutableStateOf(false) }
                 var showAssistantSheet by remember { mutableStateOf(false) }
@@ -150,8 +168,13 @@ class MainActivity : ComponentActivity() {
                 // If not yet configured, automatically ask questions on app launch only after config has finished loading
                 val isWizardActive = (uiState.isConfigLoaded && !uiState.config.isConfigured && !wizardDismissedManually) || showOnboardingWizard
 
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
+                val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+
+                if (!isLoggedIn) {
+                    LoginScreen(viewModel = viewModel)
+                } else {
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
                     topBar = {
                         CenterAlignedTopAppBar(
                             title = {
@@ -200,7 +223,7 @@ class MainActivity : ComponentActivity() {
                         NavigationBar(
                             modifier = Modifier.testTag("bottom_nav_bar")
                         ) {
-                            AppScreen.values().forEach { screen ->
+                            screens.forEach { screen ->
                                 val selected = currentScreen == screen
                                 NavigationBarItem(
                                     selected = selected,
@@ -240,6 +263,9 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToCalendarWithDate = { targetDate ->
                                     viewModel.selectDate(targetDate)
                                     currentScreen = AppScreen.CALENDAR
+                                },
+                                onNavigateToOffers = {
+                                    currentScreen = AppScreen.OFFERS
                                 }
                             )
                             AppScreen.CALENDAR -> CalendarScreen(
@@ -262,6 +288,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                             AppScreen.REPORTS -> ReportsScreen(
+                                viewModel = viewModel,
+                                uiState = uiState
+                            )
+                            AppScreen.OFFERS -> OffersScreen(
                                 viewModel = viewModel,
                                 uiState = uiState
                             )
@@ -310,6 +340,7 @@ class MainActivity : ComponentActivity() {
                                 holiday = holiday,
                                 override = override,
                                 appointments = dayAppointments,
+                                profession = uiState.config.profession,
                                 onDismiss = { showDayDetailSheet = false },
                                 onAddAppointment = {
                                     showAppointmentDialog = true
@@ -331,35 +362,15 @@ class MainActivity : ComponentActivity() {
 
                         // Appointment Dialog
                         if (showAppointmentDialog) {
-                            val effectiveStatus = ScheduleEngine.calculateEffectiveStatus(
-                                actionDate,
-                                uiState.config,
-                                uiState.overrides[actionDate],
-                                uiState.vacations
-                            )
                             AppointmentDialog(
                                 date = actionDate,
-                                dayStatus = effectiveStatus,
+                                dayStatus = ScheduleEngine.calculateEffectiveStatus(actionDate, uiState.config, uiState.overrides[actionDate], uiState.vacations),
                                 onDismiss = { showAppointmentDialog = false },
                                 onSave = { title, time, notes, reminderMinutes, isShiftSwap, partnerName ->
-                                    viewModel.addAppointment(
-                                        date = actionDate,
-                                        time = time,
-                                        title = title,
-                                        notes = notes,
-                                        reminderMinutes = reminderMinutes,
-                                        isShiftSwap = isShiftSwap,
-                                        swapPartnerName = partnerName
-                                    )
-                                    if (isShiftSwap) {
-                                        viewModel.registerSwap(actionDate, partnerName, notes)
-                                    }
+                                    viewModel.addAppointment(actionDate, time, title, notes, reminderMinutes, isShiftSwap, partnerName)
                                     showAppointmentDialog = false
                                 },
-                                onRequestSwapFromCollision = {
-                                    showAppointmentDialog = false
-                                    showSwapDialog = true
-                                }
+                                onRequestSwapFromCollision = { showAppointmentDialog = false }
                             )
                         }
 
@@ -372,8 +383,8 @@ class MainActivity : ComponentActivity() {
                                 overrides = uiState.overrides,
                                 vacations = uiState.vacations,
                                 onDismiss = { showFtDialog = false },
-                                onConfirm = { _, valueOrLocation, notes, _ ->
-                                    viewModel.registerFt(actionDate, valueOrLocation, notes)
+                                onConfirm = { partner, location, notes, paybackDate ->
+                                    viewModel.registerFt(actionDate, location, notes)
                                     showFtDialog = false
                                 }
                             )
@@ -388,69 +399,64 @@ class MainActivity : ComponentActivity() {
                                 overrides = uiState.overrides,
                                 vacations = uiState.vacations,
                                 onDismiss = { showSwapDialog = false },
-                                onConfirm = { partner, valueOrLocation, notes, paybackDate ->
-                                    val compensationNote = if (!valueOrLocation.isNullOrBlank()) "Compensar: $valueOrLocation. $notes" else notes
-                                    viewModel.registerSwap(actionDate, partner, compensationNote, paybackDate)
+                                onConfirm = { partner, location, notes, paybackDate ->
+                                    viewModel.registerSwap(actionDate, DayStatus.SWAP, partner, notes, paybackDate)
                                     showSwapDialog = false
                                 }
                             )
                         }
 
-                        // Vacation Dialog (Full month or broken dates)
+                        // Vacation Dialog
                         if (showVacationDialog) {
                             VacationDialog(
                                 vacations = uiState.vacations,
                                 onDismiss = { showVacationDialog = false },
                                 onSaveVacation = { startDate, endDate, title, notes ->
                                     viewModel.addVacation(startDate, endDate, title, notes)
-                                    showVacationDialog = false
                                 },
-                                onDeleteVacation = { vacation ->
-                                    viewModel.deleteVacation(vacation)
+                                onDeleteVacation = { vac ->
+                                    viewModel.deleteVacation(vac)
                                 }
                             )
                         }
 
-                        // Onboarding / Reconfiguration Wizard Dialog
+                        // Onboarding Wizard Dialog
                         if (isWizardActive) {
                             OnboardingWizardDialog(
                                 initialName = uiState.config.userName,
+                                initialProfession = uiState.config.profession,
                                 onDismiss = {
                                     wizardDismissedManually = true
                                     prefs.edit().putBoolean("wizard_dismissed", true).apply()
                                     showOnboardingWizard = false
                                 },
-                                onSkipWithDefault = {
-                                    viewModel.skipOnboardingWithDefault()
+                                onComplete = { name, type, refDate, refIsWork, period, startTime, endTime, uf, workCount, offCount, customPattern, profession ->
                                     wizardDismissedManually = true
                                     prefs.edit().putBoolean("wizard_dismissed", true).apply()
-                                    showOnboardingWizard = false
-                                },
-                                onComplete = { name, type, refDate, refIsWork, period, start, end, uf, workCount, offCount, pattern ->
-                                    viewModel.saveCompleteOnboarding(
+                                    viewModel.saveScheduleConfig(
                                         userName = name,
                                         type = type,
                                         refDate = refDate,
                                         refIsWork = refIsWork,
                                         period = period,
-                                        startTime = start,
-                                        endTime = end,
+                                        startTime = startTime,
+                                        endTime = endTime,
                                         uf = uf,
                                         workCount = workCount,
                                         offCount = offCount,
-                                        customPattern = pattern
+                                        customPattern = customPattern,
+                                        profession = profession
                                     )
                                     showOnboardingWizard = false
-                                    wizardDismissedManually = true
-                                    prefs.edit().putBoolean("wizard_dismissed", true).apply()
                                 }
                             )
                         }
 
-                        // App Update Dialog
+                        // Update Dialog
                         if (uiState.showUpdateDialog && uiState.activeRelease != null) {
+                            val release = uiState.activeRelease!!
                             UpdateDialog(
-                                release = uiState.activeRelease!!,
+                                release = release,
                                 currentVersion = viewModel.updateManager.currentVersionName,
                                 downloadState = uiState.downloadState,
                                 onStartDownload = {
@@ -472,4 +478,5 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
 }

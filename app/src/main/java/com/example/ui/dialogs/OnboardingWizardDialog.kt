@@ -25,6 +25,8 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Work
+import com.example.domain.ProfessionSpecialDayProvider
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -74,6 +76,7 @@ import java.util.Locale
 @Composable
 fun OnboardingWizardDialog(
     initialName: String = "",
+    initialProfession: String = "",
     onDismiss: () -> Unit,
     onSkipWithDefault: () -> Unit = onDismiss,
     onComplete: (
@@ -87,12 +90,16 @@ fun OnboardingWizardDialog(
         uf: String,
         workCount: Int,
         offCount: Int,
-        customPattern: String
+        customPattern: String,
+        profession: String
     ) -> Unit
 ) {
-    var step by remember { mutableIntStateOf(1) } // 1: Nome, 2: Escala, 3: Ciclo & Calendário, 4: Horários, 5: UF
+    var step by remember { mutableIntStateOf(1) } // 1: Nome & Profissão, 2: Escala, 3: Ciclo & Calendário, 4: Horários, 5: UF
 
     var userName by remember { mutableStateOf(if (initialName.isNotBlank() && initialName != "Plantonista") initialName else "") }
+    var profession by remember { mutableStateOf(if (initialProfession.isNotBlank() && initialProfession != "Geral") initialProfession else "") }
+    var professionDropdownExpanded by remember { mutableStateOf(false) }
+
     var selectedType by remember { mutableStateOf(ScheduleType.TWELVE_THIRTY_SIX) }
     var refDate by remember { mutableStateOf(LocalDate.now()) }
     var refIsWork by remember { mutableStateOf(true) }
@@ -205,9 +212,48 @@ fun OnboardingWizardDialog(
                             singleLine = true
                         )
 
-                        Spacer(modifier = Modifier.height(14.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        ExposedDropdownMenuBox(
+                            expanded = professionDropdownExpanded,
+                            onExpandedChange = { professionDropdownExpanded = !professionDropdownExpanded },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = profession,
+                                onValueChange = { profession = it },
+                                label = { Text("Sua Profissão (Enfermagem, Vigilante, Médico...)") },
+                                leadingIcon = { Icon(Icons.Default.Work, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = professionDropdownExpanded) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(),
+                                singleLine = true
+                            )
+
+                            ExposedDropdownMenu(
+                                expanded = professionDropdownExpanded,
+                                onDismissRequest = { professionDropdownExpanded = false }
+                            ) {
+                                ProfessionSpecialDayProvider.RECOGNIZED_PROFESSIONS.forEach { prof ->
+                                    DropdownMenuItem(
+                                        text = { Text(prof) },
+                                        onClick = {
+                                            if (prof.contains("Outra profissão")) {
+                                                profession = ""
+                                            } else {
+                                                profession = prof
+                                            }
+                                            professionDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Assim o aplicativo personalizará todos os relatórios, alertas de folga e seu painel diário.",
+                            text = "💡 Você pode escolher uma das profissões sugeridas acima ou digitar livremente a sua profissão.",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -750,7 +796,8 @@ fun OnboardingWizardDialog(
                             selectedUf,
                             customWorkCount,
                             customOffCount,
-                            patternString
+                            patternString,
+                            profession
                         )
                         onDismiss()
                     },

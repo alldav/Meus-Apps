@@ -29,11 +29,34 @@ import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Weekend
 import com.example.data.update.UpdateCheckState
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Switch
+import com.example.ui.dialogs.PixSupportDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.OfferItem
+import com.example.data.model.ProductRequestItem
+import com.example.ui.dialogs.FeedbackDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -45,6 +68,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,6 +87,17 @@ import com.example.ui.theme.FolgaGreen
 import com.example.ui.theme.FtAmber
 import com.example.ui.theme.PlantaoBlue
 import com.example.ui.theme.TrocaPurple
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.TipsAndUpdates
+import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.example.domain.ProfessionSpecialDayProvider
+import com.example.ui.theme.TrocaWorkCyan
 import com.example.ui.theme.VacationTeal
 import com.example.ui.viewmodel.ShiftUiState
 import com.example.ui.viewmodel.ShiftViewModel
@@ -77,17 +116,22 @@ fun DashboardScreen(
     onOpenVacationDialog: () -> Unit,
     onOpenOnboardingWizard: () -> Unit,
     onSelectDate: (LocalDate) -> Unit,
-    onNavigateToCalendarWithDate: (LocalDate) -> Unit = { onNavigateToCalendar() }
+    onNavigateToCalendarWithDate: (LocalDate) -> Unit = { onNavigateToCalendar() },
+    onNavigateToOffers: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
     val today = LocalDate.now()
     val daysUntilNextOff = ChronoUnit.DAYS.between(today, uiState.nextOffDate).coerceAtLeast(0)
 
+    var showPixDialog by remember { mutableStateOf(false) }
+    var showFeedbackDialog by remember { mutableStateOf(false) }
+
     val (statusColor, statusTitle, statusSubtitle) = when (uiState.todayStatus) {
         DayStatus.OFF -> Triple(FolgaGreen, "FOLGA HOJE", "Dia livre para descanso")
         DayStatus.WORK -> Triple(PlantaoBlue, "PLANTÃO HOJE", "Turno: ${uiState.todayHoursLabel}")
         DayStatus.FT -> Triple(FtAmber, "FOLGA TRABALHADA", "Turno extra de FT registrado")
-        DayStatus.SWAP -> Triple(TrocaPurple, "TROCA DE PLANTÃO", "Permuta de serviço ativa")
+        DayStatus.SWAP -> Triple(TrocaPurple, "FOLGA POR TROCA", "Folga ganha em permuta de serviço")
+        DayStatus.SWAP_WORK -> Triple(TrocaWorkCyan, "PLANTÃO POR TROCA", "Turno atípico (cobrindo colega)")
         DayStatus.VACATION -> Triple(VacationTeal, "EM FÉRIAS 🏖️", "Aproveite seu descanso merecido!")
     }
 
@@ -99,7 +143,7 @@ fun DashboardScreen(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Editorial Loose Header with Personalized Greeting
+            // Editorial Loose Header with Personalized Greeting & Profession
             Column {
                 Text(
                     text = today.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", Locale("pt", "BR"))).replaceFirstChar { it.uppercase() },
@@ -113,12 +157,33 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Olá, ${uiState.config.userName}!",
-                        style = MaterialTheme.typography.displayMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Olá, ${uiState.config.userName}!",
+                            style = MaterialTheme.typography.displayMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (uiState.config.profession.isNotBlank() && uiState.config.profession != "Geral" && uiState.config.profession != "Outra Profissão / Geral") {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = uiState.config.profession,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+                    }
 
                     Surface(
                         shape = RoundedCornerShape(20.dp),
@@ -151,32 +216,300 @@ fun DashboardScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .clickable { viewModel.checkForUpdates(showDialogIfAvailable = true) }
                         .testTag("dashboard_update_banner"),
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Nova versão ${release.versionName} disponível!",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "Toque para ver as novidades e atualizar.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { viewModel.checkForUpdates(showDialogIfAvailable = true) },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Nova versão ${release.versionName} disponível!",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Toque para ver novidades e atualizar.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = { viewModel.dismissUpdateBanner() },
+                            modifier = Modifier.size(32.dp).testTag("dismiss_update_banner_button")
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Fechar aviso",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                        Icon(Icons.Default.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                     }
+                }
+            }
+
+            // Homenagem do Dia da Profissão (Se for o dia comemorativo do usuário)
+            val celebration = ProfessionSpecialDayProvider.checkCelebrationForToday(uiState.config.profession, today)
+            if (celebration != null) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .testTag("profession_celebration_card"),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = celebration.iconEmoji, fontSize = 34.sp)
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = celebration.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = celebration.message,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
+                                lineHeight = 19.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Card "Você Sabia? • Dicas para o seu Plantão"
+            val tips = remember(uiState.config.profession) {
+                ProfessionSpecialDayProvider.getTipsForProfession(uiState.config.profession)
+            }
+            var currentTipIndex by remember { mutableIntStateOf(0) }
+            if (tips.isNotEmpty()) {
+                val tip = tips[currentTipIndex % tips.size]
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .testTag("plantonista_tip_card"),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(text = tip.iconEmoji, fontSize = 18.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Você Sabia? • ${tip.category}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            TextButton(
+                                onClick = { currentTipIndex++ },
+                                modifier = Modifier.testTag("next_tip_button")
+                            ) {
+                                Text("Outra Dica →", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = tip.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = tip.content,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+            }
+
+            // Card de Hidratação & Meta de Água no Plantão
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .testTag("hydration_tracker_card"),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    val consumed = uiState.waterConsumedMl
+                    val goal = uiState.waterGoalMl.coerceAtLeast(1)
+                    val progress = (consumed.toFloat() / goal.toFloat()).coerceIn(0f, 1f)
+                    val percent = (progress * 100).toInt()
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "💧", fontSize = 22.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Meta de Água no Plantão",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "$consumed ml de $goal ml ($percent%)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (uiState.waterReminderEnabled) Icons.Default.NotificationsActive else Icons.Default.NotificationsNone,
+                                contentDescription = "Lembrete",
+                                tint = if (uiState.waterReminderEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Switch(
+                                checked = uiState.waterReminderEnabled,
+                                onCheckedChange = { viewModel.toggleWaterReminder(it) },
+                                modifier = Modifier.testTag("water_reminder_switch")
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalButton(
+                            onClick = { viewModel.addWater(250) },
+                            modifier = Modifier.weight(1f).testTag("add_water_250_btn"),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp, horizontal = 4.dp)
+                        ) {
+                            Text("🥤 +250 ml", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        FilledTonalButton(
+                            onClick = { viewModel.addWater(500) },
+                            modifier = Modifier.weight(1f).testTag("add_water_500_btn"),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp, horizontal = 4.dp)
+                        ) {
+                            Text("🍶 +500 ml", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.resetWater() },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp, horizontal = 8.dp)
+                        ) {
+                            Text("↺ Zerar", fontSize = 11.sp)
+                        }
+                    }
+
+                    if (uiState.waterReminderEnabled) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Lembrete ativo a cada 2 horas no plantão",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            TextButton(
+                                onClick = { viewModel.sendTestWaterNotification() },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                            ) {
+                                Text("Testar Lembrete", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Clube de Ofertas & Cupons Shortcut
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onNavigateToOffers() },
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.LocalOffer,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "🎁 Clube de Ofertas & Cupons Exclusivos",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Acesse cupons de desconto, eletrônicos, perfumes e produtos para plantão com links de afiliado.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text("Ver →", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
@@ -722,6 +1055,7 @@ fun DashboardScreen(
                             DayStatus.WORK -> PlantaoBlue
                             DayStatus.FT -> FtAmber
                             DayStatus.SWAP -> TrocaPurple
+                            DayStatus.SWAP_WORK -> TrocaWorkCyan
                             DayStatus.VACATION -> VacationTeal
                         }
 
@@ -851,6 +1185,63 @@ fun DashboardScreen(
                 }
             }
 
+            // Card: Apoie o App & Envie sua Sugestão
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp)),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Desenvolvimento Independente",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "O Escala Medina é mantido com carinho para quem trabalha por turnos no Brasil. Ajude com qualquer valor ou envie sua opinião!",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = { showPixDialog = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("open_pix_dialog_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Apoiar com Pix", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = { showFeedbackDialog = true },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("open_feedback_dialog_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Lightbulb, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Enviar Sugestão", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(60.dp))
         }
 
@@ -872,6 +1263,311 @@ fun DashboardScreen(
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp
             )
+        }
+
+        if (showPixDialog) {
+            PixSupportDialog(onDismiss = { showPixDialog = false })
+        }
+
+        if (showFeedbackDialog) {
+            FeedbackDialog(onDismiss = { showFeedbackDialog = false })
+        }
+    }
+}
+
+@Composable
+fun OffersAndCouponsSection(viewModel: ShiftViewModel) {
+    val context = LocalContext.current
+    val offersEnabled by viewModel.offersEnabled.collectAsStateWithLifecycle()
+    if (!offersEnabled) return
+
+    val selectedCategories by viewModel.selectedOfferCategories.collectAsStateWithLifecycle()
+    val selectedMarketplaces by viewModel.selectedOfferMarketplaces.collectAsStateWithLifecycle()
+    val allOffers by viewModel.activeOffers.collectAsStateWithLifecycle()
+
+    var selectedFilterCategory by remember { mutableStateOf("Todos") }
+    var selectedFilterMarketplace by remember { mutableStateOf("Todos") }
+
+    var showRequestDialog by remember { mutableStateOf(false) }
+    var requestedProductName by remember { mutableStateOf("") }
+    var requestedCategory by remember { mutableStateOf("Eletrônicos") }
+
+    val categoriesList = listOf("Todos", "Eletrônicos", "Perfumes", "Casa", "Moda", "Utilidades", "Saúde & Bem-Estar")
+
+    val filteredOffers = allOffers.filter { offer ->
+        val catMatch = selectedCategories.contains(offer.category) && (selectedFilterCategory == "Todos" || offer.category == selectedFilterCategory)
+        val mktMatch = selectedMarketplaces.contains(offer.marketplace) && (selectedFilterMarketplace == "Todos" || offer.marketplace == selectedFilterMarketplace)
+        catMatch && mktMatch
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .testTag("offers_and_coupons_section"),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "🏷️", fontSize = 22.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "Clube de Ofertas & Cupons do Plantão",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Descontos exclusivos nas suas lojas favoritas",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Category Filter Chips
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(categoriesList.size) { index ->
+                    val cat = categoriesList[index]
+                    val isSelected = selectedFilterCategory == cat
+                    androidx.compose.material3.FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedFilterCategory = cat },
+                        label = { Text(cat, fontSize = 11.sp) }
+                    )
+                }
+            }
+
+            if (filteredOffers.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Nenhuma oferta encontrada para os filtros selecionados.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    filteredOffers.take(4).forEach { offer ->
+                        OfferCardItem(
+                            offer = offer,
+                            onCopyCoupon = { code ->
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("Cupom de Desconto", code)
+                                clipboard.setPrimaryClip(clip)
+                                Toast.makeText(context, "Cupom '$code' copiado com sucesso! 📋", Toast.LENGTH_SHORT).show()
+                            },
+                            onOpenLink = { url ->
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "Não foi possível abrir o link da oferta.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Wishlist / Product Request Box Banner
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { showRequestDialog = true },
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(text = "💡", fontSize = 20.sp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Quer algum produto específico com desconto?",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Comente aqui o que você está procurando para adicionarmos nas próximas ofertas!",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Text("Pedir →", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+
+    if (showRequestDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRequestDialog = false },
+            title = { Text("Pedir Produto com Desconto", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Qual produto você gostaria de encontrar em promoção nas próximas ofertas?",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = requestedProductName,
+                        onValueChange = { requestedProductName = it },
+                        label = { Text("Nome do produto ou marca") },
+                        placeholder = { Text("Ex: Tênis Nike, Perfume X, Fone Bluetooth...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (requestedProductName.isNotBlank()) {
+                            viewModel.submitProductRequest(requestedProductName, requestedCategory, "Plantonista")
+                            Toast.makeText(context, "Pedido enviado com sucesso! Obrigado pela sugestão.", Toast.LENGTH_LONG).show()
+                            requestedProductName = ""
+                            showRequestDialog = false
+                        }
+                    }
+                ) {
+                    Text("Enviar Pedido")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRequestDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun OfferCardItem(
+    offer: OfferItem,
+    onCopyCoupon: (String) -> Unit,
+    onOpenLink: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = when (offer.marketplace) {
+                        "Amazon" -> Color(0xFFFF9900).copy(alpha = 0.2f)
+                        "Shopee" -> Color(0xFFEE4D2D).copy(alpha = 0.2f)
+                        else -> Color(0xFFFFE600).copy(alpha = 0.3f)
+                    }
+                ) {
+                    Text(
+                        text = offer.marketplace,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = when (offer.marketplace) {
+                            "Amazon" -> Color(0xFFB26B00)
+                            "Shopee" -> Color(0xFFD73814)
+                            else -> Color(0xFF8F7A00)
+                        }
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = offer.discountBadge,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Text(
+                text = offer.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            Text(
+                text = offer.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 16.sp
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = offer.priceTag,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (!offer.couponCode.isNullOrBlank()) {
+                        OutlinedButton(
+                            onClick = { onCopyCoupon(offer.couponCode!!) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("Cupom: ${offer.couponCode}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Button(
+                        onClick = { onOpenLink(offer.affiliateUrl) },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Ver Oferta →", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }

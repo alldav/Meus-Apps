@@ -58,6 +58,57 @@ class ScheduleRepository(private val database: AppDatabase) {
         dayOverrideDao.saveOverride(override)
     }
 
+    suspend fun saveSwapWithPayback(
+        mainDate: LocalDate,
+        mainStatus: DayStatus,
+        partnerName: String?,
+        extraValueOrLocation: String?,
+        notes: String?,
+        paybackDate: LocalDate?
+    ) {
+        val mainOverride = DayOverrideEntity(
+            date = mainDate,
+            status = mainStatus,
+            partnerName = partnerName,
+            extraValueOrLocation = extraValueOrLocation,
+            notes = notes,
+            paybackDate = paybackDate,
+            paybackCompleted = false
+        )
+        dayOverrideDao.saveOverride(mainOverride)
+
+        if (paybackDate != null) {
+            val reciprocalStatus = if (mainStatus == DayStatus.SWAP) DayStatus.SWAP_WORK else DayStatus.SWAP
+            val reciprocalNote = if (mainStatus == DayStatus.SWAP) {
+                "Pagamento de plantão: Você cobre o plantão do colega $partnerName (acordado em ${mainDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"))})"
+            } else {
+                "Folga por devolução: O colega $partnerName cobre seu plantão (devolução do dia ${mainDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM"))})"
+            }
+
+            val reciprocalOverride = DayOverrideEntity(
+                date = paybackDate,
+                status = reciprocalStatus,
+                partnerName = partnerName,
+                extraValueOrLocation = extraValueOrLocation,
+                notes = reciprocalNote,
+                paybackDate = mainDate,
+                paybackCompleted = false
+            )
+            dayOverrideDao.saveOverride(reciprocalOverride)
+        }
+    }
+
+    suspend fun updateProfessionProfile(profession: String, roleOrTitle: String, sector: String) {
+        val current = getOrCreateDefaultConfig()
+        saveScheduleConfig(
+            current.copy(
+                profession = profession,
+                roleOrTitle = roleOrTitle,
+                sector = sector
+            )
+        )
+    }
+
     suspend fun removeDayOverride(date: LocalDate) {
         dayOverrideDao.deleteOverrideForDate(date)
     }
@@ -127,7 +178,16 @@ class ScheduleRepository(private val database: AppDatabase) {
                     }
                 }
                 DayStatus.FT -> ft++
-                DayStatus.SWAP -> swap++
+                DayStatus.SWAP -> {
+                    swap++
+                    if (date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY) {
+                        weekendOff++
+                    }
+                }
+                DayStatus.SWAP_WORK -> {
+                    work++
+                    swap++
+                }
                 DayStatus.VACATION -> {
                     vacationDays++
                     if (date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY) {

@@ -15,7 +15,8 @@ enum class DayStatus(val label: String) {
     WORK("Plantão"),
     OFF("Folga"),
     FT("Folga Trabalhada (FT)"),
-    SWAP("Troca de Plantão"),
+    SWAP("Folga por Troca"),
+    SWAP_WORK("Plantão por Troca"),
     VACATION("Férias")
 }
 
